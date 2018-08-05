@@ -1,0 +1,623 @@
+
+----------------------------------------------------------------------------------------CHAPTER 1 and CHAPTER 2---------------------------------------------------------------------------------------------
+
+
+
+
+
+
+//////////////////////////////
+Why Spark
+//////////////////////////////
+
+
+
+
+Spark’s key driving goal is to offer a unified platform for writing big data applications. What do we mean by unified? Spark is designed to support a wide range of data analytics tasks, ranging from simple data loading and SQL queries to machine learning and streaming computation, over the same computing engine and with a consistent set of APIs. The main insight behind this goal is that real-world data analytics tasks—whether they are interactive analytics in a tool such as a Jupyter notebook, or traditional software development for production applications—tend to combine many different processing types and libraries.
+
+Spark’s APIs are also designed to enable high performance by optimizing across the different libraries and functions composed together in a user program. For example, if you load data using a SQL query and then evaluate a machine learning model over it using Spark’s ML library, the engine can combine these steps into one scan over the data. The combination of general APIs and high-performance execution, no matter how you combine them, makes Spark a powerful platform for interactive and production applications.
+
+At the same time that Spark strives for unification, it carefully limits its scope to a computing engine. By this, we mean that Spark handles loading data from storage systems and performing computation on it, not permanent storage as the end itself. You can use Spark with a wide variety of persistent storage systems, including cloud storage systems such as Azure Storage and Amazon S3, distributed file systems such as Apache Hadoop, key-value stores such as Apache Cassandra, and message buses such as Apache Kafka. However, Spark neither stores data long term itself, nor favors one over another. The key motivation here is that most data already resides in a mix of storage systems. Data is expensive to move so Spark focuses on performing computations over the data, no matter where it resides. In user-facing APIs, Spark works hard to make these storage systems look largely similar so that applications do not need to worry about where their data is.
+
+Spark’s final component is its libraries, which build on its design as a unified engine to provide a unified API for common data analysis tasks. Spark supports both standard libraries that ship with the engine as well as a wide array of external libraries published as third-party packages by the open source communities. Today, Spark’s standard libraries are actually the bulk of the open source project: the Spark core engine itself has changed little since it was first released, but the libraries have grown to provide more and more types of functionality. Spark includes libraries for SQL and structured data (Spark SQL), machine learning (MLlib), stream processing (Spark Streaming and the newer Structured Streaming), and graph analytics (GraphX). Beyond these libraries, there are hundreds of open source external libraries ranging from connectors for various storage systems to machine learning algorithms. One index of external libraries is available at spark-packages.org.
+
+
+
+
+//////////////////////////////
+Basic Architecture
+/////////////////////////////
+
+
+
+
+Now, a group of machines alone is not powerful, you need a framework to coordinate work across them. Spark does just that, managing and coordinating the execution of tasks on data across a cluster of computers. The cluster of machines that Spark will use to execute tasks is managed by a cluster manager like Spark’s standalone cluster manager, YARN, or Mesos. We then submit Spark Applications to these cluster managers, which will grant resources to our application so that we can complete our work.
+
+Spark Applications consist of a driver process and a set of executor processes. The driver process runs your main() function, sits on a node in the cluster, and is responsible for three things: maintaining information about the Spark Application; responding to a user’s program or input; and analyzing, distributing, and scheduling work across the executors (discussed momentarily). The executors are responsible for actually carrying out the work that the driver assigns them. This means that each executor is responsible for only two things: executing code assigned to it by the driver, and reporting the state of the computation on that executor back to the driver node.
+
+The executors, for the most part, will always be running Spark code. However, the driver can be “driven” from a number of different languages through Spark’s language APIs. Let’s take a look at those in the next section.Spark’s language APIs make it possible for you to run Spark code using various programming languages. For the most part, Spark presents some core “concepts” in every language; these concepts are then translated into Spark code that runs on the cluster of machines. If you use just the Structured APIs, you can expect all languages to have similar performance characteristics. 
+
+Spark has two fundamental sets of APIs: the low-level “unstructured” APIs, and the higher-level structured APIs. We discuss both in this book, but these introductory chapters will focus primarily on the higher-level structured APIs.
+
+
+
+
+//////////////////////////////
+Getting Started
+//////////////////////////////
+
+
+
+
+When we actually go about writing our Spark Application, we are going to need a way to send user commands and data to it. We do that by first creating a SparkSession. Spark session can be started by either executing the command ./bin/spark-shell for Scala API and ./bin/pyspark for python API; this will start an interactive spark application. There is also a process of submitting standalone applications to spark called spark-submit whereby you submit precompiled application to spark.
+
+When you start Spark in this interactive mode, you implicitly create a SparkSession that manages the Spark Application. When you start it through a standalone application, you must create the SparkSession object yourself in your application code.You control your Spark Application through a driver process called the SparkSession. The SparkSession instance is the way Spark executes user-defined manipulations across the cluster. There is a one-to-one correspondence between a SparkSession and a Spark Application. 
+
+
+
+
+//////////////////////////////
+DataFrames
+//////////////////////////////
+
+
+
+
+A DataFrame is the most common Structured API and simply represents a table of data with rows and columns. The list that defines the columns and the types within those columns is called the schema. The DataFrame concept is not unique to Spark. R and Python both have similar concepts. However, Python/R DataFrames (with some exceptions) exist on one machine rather than multiple machines. Because Spark has language interfaces for both Python and R, it’s quite easy to convert Pandas (Python) DataFrames to Spark DataFrames, and R DataFrames to Spark DataFrames.
+
+To allow every executor to perform work in parallel, Spark breaks up the data into chunks called partitions. A partition is a collection of rows that sit on one physical machine in your cluster. A DataFrame’s partitions represent how the data is physically distributed across the cluster of machines during execution. If you have one partition, Spark will have a parallelism of only one, even if you have thousands of executors. If you have many partitions but only one executor, Spark will still have a parallelism of only one because there is only one computation resource.
+
+In Spark, the core data structures are immutable, meaning they cannot be changed after they’re created. This might seem like a strange concept at first: if you cannot change it, how are you supposed to use it? To “change” a DataFrame, you need to instruct Spark how you would like to modify it to do what you want. These instructions are called transformations. There are two types of transformations: those that specify narrow dependencies, and those that specify wide dependencies.
+
+Transformations consisting of narrow dependencies (we’ll call them narrow transformations) are those for which each input partition will contribute to only one output partitionTransformations consisting of narrow dependencies (we’ll call them narrow transformations) are those for which each input partition will contribute to only one output partition.
+
+A wide dependency (or wide transformation) style transformation will have input partitions contributing to many output partitions. You will often hear this referred to as a shuffle whereby Spark will exchange partitions across the cluster. 
+
+With narrow transformations, Spark will automatically perform an operation called pipelining, meaning that if we specify multiple filters on DataFrames, they’ll all be performed in-memory. The same cannot be said for shuffles. When we perform a shuffle, Spark writes the results to disk.
+
+Lazy evaulation means that Spark will wait until the very last moment to execute the graph of computation instructions. In Spark, instead of modifying the data immediately when you express some operation, you build up a plan of transformations that you would like to apply to your source data. By waiting until the last minute to execute the code, Spark compiles this plan from your raw DataFrame transformations to a streamlined physical plan that will run as efficiently as possible across the cluster. This provides immense benefits because Spark can optimize the entire data flow from end to end
+
+Transformations allow us to build up our logical transformation plan. To trigger the computation, we run an action. There are three kinds of actions:
+1. Actions to view data in the console
+2. Actions to collect data to native objects in the respective language
+3. Actions to write to output data sources
+
+
+//////////////////////////////
+Putting it all together
+//////////////////////////////
+
+
+
+
+val flightData2015 = spark
+  .read
+  .option("inferSchema", "true")
+  .option("header", "true")
+  .csv("/data/flight-data/csv/2015-summary.csv")
+
+flightData2015.sort('count').take(3)
+
+
+You can express your business logic in SQL or DataFrames (either in R, Python, Scala, or Java) and Spark will compile that logic down to an underlying plan (that you can see in the explain plan) before actually executing your code.With Spark SQL, you can register any DataFrame as a table or view (a temporary table) and query it using pure SQL. There is no performance difference between writing SQL queries or writing DataFrame code, they both “compile” to the same underlying plan that we specify in DataFrame code.
+
+flightData2015.createOrReplaceTempView("flight_data_2015")
+
+
+
+
+----------Spark SQL-------------
+val sqlWay = spark.sql("""
+SELECT DEST_COUNTRY_NAME, count(1)
+FROM flight_data_2015
+GROUP BY DEST_COUNTRY_NAME
+""")
+
+----------Spark SCALA------------
+val dataFrameWay = flightData2015
+  .groupBy('DEST_COUNTRY_NAME)
+  .count()
+
+----------Spark SQL-------------
+spark.sql("SELECT max(count) from flight_data_2015").take(1)
+
+----------Spark SCALA------------
+import org.apache.spark.sql.functions.max
+flightData2015.select(max("count")).take(1)
+
+----------Spark SQL-------------
+val maxSql = spark.sql("""
+SELECT DEST_COUNTRY_NAME, sum(count) as destination_total
+FROM flight_data_2015
+GROUP BY DEST_COUNTRY_NAME
+ORDER BY sum(count) DESC
+LIMIT 5
+""")
+
+maxSql.show()
+
+----------Spark SCALA------------
+import org.apache.spark.sql.functions.desc
+
+flightData2015
+  .groupBy("DEST_COUNTRY_NAME")
+  .sum("count")
+  .withColumnRenamed("sum(count)", "destination_total")
+  .sort(desc("destination_total"))
+  .limit(5)
+  .show()
+
+
+
+----------------------------------------------------------------------------------------CHAPTER 3 and Chapter 4-----------------------------------------------------------------------------------------------------------
+
+
+Spark also makes it easy to turn your interactive exploration into production applications with spark-submit, a built-in command-line tool. spark-submit does one thing: it lets you send your application code to a cluster and launch it to execute there. Upon submission, the application will run until it exits (completes the task) or encounters an error. spark-submit offers several controls with which you can specify the resources your application needs as well as how it should be run and its command-line arguments.
+
+Streaming actions are a bit different from our conventional static action because we’re going to be populating data somewhere instead of just calling something like count (which doesn’t make any sense on a stream anyways). The action we will use will output to an in-memory table that we will update after each trigger. In this case, each trigger is based on an individual file (the read option that we set). Spark will mutate the data in the in-memory table such that we will always have the highest value as specified in our previous aggregation:
+
+
+Definitionally, a DataFrame consists of a series of records (like rows in a table), that are of type Row, and a number of columns (like columns in a spreadsheet) that represent a computation expression that can be performed on each individual record in the Dataset. Schemas define the name as well as the type of data in each column. Partitioning of the DataFrame defines the layout of the DataFrame or Dataset’s physical distribution across the cluster. The partitioning scheme defines how that is allocated. You can set this to be based on values in a certain column or nondeterministically.
+
+A schema defines the column names and types of a DataFrame. We can either let a data source define the schema (called schema-on-read) or we can define it explicitly ourselves. A schema is a StructType made up of a number of fields, StructFields, that have a name, type, a Boolean flag which specifies whether that column can contain missing or null values, and, finally, users can optionally specify associated metadata with that column. The metadata is a way of storing information about this column (Spark uses this in its machine learning library). Schemas can contain other StructTypes (Spark’s complex types).If the types in the data (at runtime) do not match the schema, Spark will throw an error.
+
+Columns in Spark are similar to columns in a spreadsheet, R dataframe, or pandas DataFrame. You can select, manipulate, and remove columns from DataFrames and these operations are represented as expressions.To Spark, columns are logical constructions that simply represent a value computed on a per-record basis by means of an expression. This means that to have a real value for a column, we need to have a row; and to have a row, we need to have a DataFrame. You cannot manipulate an individual column outside the context of a DataFrame; you must use Spark transformations within a DataFrame to modify the contents of a column. We mentioned earlier that columns are expressions, but what is an expression? An expression is a set of transformations on one or more values in a record in a DataFrame. Think of it like a function that takes as input one or more column names, resolves them, and then potentially applies more expressions to create a single value for each record in the dataset. Importantly, this “single value” can actually be a complex type like a Map or Array. We’ll see more of the complex types in Chapter 6.In the simplest case, an expression, created via the expr function, is just a DataFrame column reference. In the simplest case, expr("someCol") is equivalent to col("someCol"). Sometimes, you’ll need to see a DataFrame’s columns, which you can do by using something like printSchema; however, if you want to programmatically access columns, you can use the columns property to see all columns on a DataFrame.
+
+You can create rows by manually instantiating a Row object with the values that belong in each column. It’s important to note that only DataFrames have schemas. Rows themselves do not have schemas. This means that if you create a Row manually, you must specify the values in the same order as the schema of the DataFrame to which they might be appended (we will see this when we discuss creating DataFrames). We can also create a dataframe from rows in Spark by 
+
+
+//////////////////////////////////
+//////High Level Spark APIs///////
+/////////////////////////////////
+
+-----------------------Spark Scala---------------------
+
+spark.conf.set("spark.sql.shuffle.partitions", "5") // this is a number you should reduce if you have less executors, default is 200
+
+val staticDataFrame = spark.read.format("csv")
+  .option("header", "true")
+  .option("inferSchema", "true")
+  .load("/data/retail-data/by-day/*.csv")
+
+staticDataFrame.createOrReplaceTempView("retail_data")
+val staticSchema = staticDataFrame.schema
+
+import org.apache.spark.sql.functions.{window, column, desc, col}
+staticDataFrame
+  .selectExpr(
+    "CustomerId",
+    "(UnitPrice * Quantity) as total_cost",
+    "InvoiceDate")
+  .groupBy(
+    col("CustomerId"), window(col("InvoiceDate"), "1 day"))
+  .sum("total_cost")
+  .show(5)
+
+
+val df = spark.read.format("json")
+  .load("/data/flight-data/json/2015-summary.json")
+
+import org.apache.spark.sql.types.{StructField, StructType, StringType, LongType}
+import org.apache.spark.sql.types.Metadata
+
+val myManualSchema = StructType(Array(
+  StructField("DEST_COUNTRY_NAME", StringType, true),
+  StructField("ORIGIN_COUNTRY_NAME", StringType, true),
+  StructField("count", LongType, false,
+    Metadata.fromJson("{\"hello\":\"world\"}"))
+))
+
+val df = spark.read.format("json").schema(myManualSchema)
+  .load("/data/flight-data/json/2015-summary.json")
+
+
+import org.apache.spark.sql.functions.{col, column}
+col("someColumnName")
+column("someColumnName")
+(((col("someCol") + 5) * 200) - 6) < col("otherCol")
+
+import org.apache.spark.sql.Row
+val myRow = Row("Hello", null, 1, false)
+
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.{StructField, StructType, StringType, LongType}
+
+val myManualSchema = new StructType(Array(
+  new StructField("some", StringType, true),
+  new StructField("col", StringType, true),
+  new StructField("names", LongType, false)))
+
+val myRows = Seq(Row("Hello", null, 1L))
+val myRDD = spark.sparkContext.parallelize(myRows)
+val myDf = spark.createDataFrame(myRDD, myManualSchema)
+myDf.show()
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+select and selectExpr allow you to do the DataFrame equivalent of SQL queries on a table of data:
+
+df.select("DEST_COUNTRY_NAME").show(2)
+df.select("DEST_COUNTRY_NAME", "ORIGIN_COUNTRY_NAME").show(2)
+
+import org.apache.spark.sql.functions.{expr, col, column}
+df.select(
+    df.col("DEST_COUNTRY_NAME"),
+    col("DEST_COUNTRY_NAME"),
+    column("DEST_COUNTRY_NAME"),
+    'DEST_COUNTRY_NAME,
+    $"DEST_COUNTRY_NAME",
+    expr("DEST_COUNTRY_NAME"))
+  .show(2)
+
+
+// use this always if you want to rename a column
+df.select(expr("DEST_COUNTRY_NAME AS destination")).show(2)
+df.select(expr("DEST_COUNTRY_NAME as destination").alias("DEST_COUNTRY_NAME"))
+  .show(2)
+
+df.selectExpr("DEST_COUNTRY_NAME as newColumnName", "DEST_COUNTRY_NAME").show(2)
+
+df.selectExpr(
+    "*", // include all original columns
+    "(DEST_COUNTRY_NAME = ORIGIN_COUNTRY_NAME) as withinCountry")
+  .show(2)
+
+df.withColumn("withinCountry", expr("ORIGIN_COUNTRY_NAME == DEST_COUNTRY_NAME"))
+  .show(2)
+
+df.selectExpr("avg(count)", "count(distinct(DEST_COUNTRY_NAME))").show(2)
+
+import org.apache.spark.sql.functions.lit
+df.select(expr("*"), lit(1).as("One")).show(2)
+
+df.withColumn("numberOne", lit(1)).show(2)
+
+df.withColumnRenamed("DEST_COUNTRY_NAME", "dest").columns
+
+df.drop("ORIGIN_COUNTRY_NAME").columns
+
+dfWithLongColName.drop("ORIGIN_COUNTRY_NAME", "DEST_COUNTRY_NAME")
+
+df.withColumn("count2", col("count").cast("long"))
+
+df.filter(col("count") < 2).show(2)
+df.where("count < 2").show(2)
+df.where(col("count") < 2).where(col("ORIGIN_COUNTRY_NAME") =!= "Croatia").show(2)
+
+df.select("ORIGIN_COUNTRY_NAME", "DEST_COUNTRY_NAME").distinct().count()
+
+val seed = 5
+val withReplacement = false
+val fraction = 0.5
+df.sample(withReplacement, fraction, seed).count()
+
+val dataFrames = df.randomSplit(Array(0.25, 0.75), seed)
+
+df.sort("count").show(5)
+df.orderBy("count", "DEST_COUNTRY_NAME").show(5)
+df.orderBy(col("count"), col("DEST_COUNTRY_NAME")).show(5)
+import org.apache.spark.sql.functions.{desc, asc}
+df.orderBy(expr("count desc")).show(2)
+df.orderBy(desc("count"), asc("DEST_COUNTRY_NAME")).show(2)
+
+df.limit(5).show()
+
+df.rdd.getNumPartitions 
+
+df.repartition(5)
+
+df.repartition(5, col("DEST_COUNTRY_NAME")).coalesce(2)
+
+// in Scala
+val collectDF = df.limit(10)
+collectDF.take(5) // take works with an Integer count
+collectDF.show() // this prints it out nicely
+collectDF.show(5, false)
+collectDF.collect()
+
+collectDF.toLocalIterator()
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Sometimes, we need to pass explicit values into Spark that are just a value (rather than a new column). This might be a constant value or something we’ll need to compare to later on. The way we do this is through literals. There’s also a more formal way of adding a new column to a DataFrame, and that’s by using the withColumn method on our DataFrame. 
+
+Instinctually, you might want to put multiple filters into the same expression. Although this is possible, it is not always useful, because Spark automatically performs all filtering operations at the same time regardless of the filter ordering. This means that if you want to specify multiple AND filters, just chain them sequentially and let Spark handle the rest.
+
+A very common use case is to extract the unique or distinct values in a DataFrame. These values can be in one or more columns. The way we do this is by using the distinct method on a DataFrame, which allows us to deduplicate any rows that are in that DataFrame. For instance, let’s get the unique origins in our dataset. This, of course, is a transformation that will return a new DataFrame with only unique rows.
+
+Sometimes, you might just want to sample some random records from your DataFrame. You can do this by using the sample method on a DataFrame, which makes it possible for you to specify a fraction of rows to extract from a DataFrame and whether you’d like to sample with or without replacement.
+
+Random splits can be helpful when you need to break up your DataFrame into a random “splits” of the original DataFrame. This is often used with machine learning algorithms to create training, validation, and test sets. In this next example, we’ll split our DataFrame into two different DataFrames by setting the weights by which we will split the DataFrame (these are the arguments to the function). Because this method is designed to be randomized, we will also specify a seed (just replace seed with a number of your choosing in the code block). It’s important to note that if you don’t specify a proportion for each DataFrame that adds up to one, they will be normalized so that they do.
+
+Another important optimization opportunity is to partition the data according to some frequently filtered columns, which control the physical layout of data across the cluster including the partitioning scheme and the number of partitions. Repartition will incur a full shuffle of the data, regardless of whether one is necessary. This means that you should typically only repartition when the future number of partitions is greater than your current number of partitions or when you are looking to partition by a set of columns.
+
+Coalesce, on the other hand, will not incur a full shuffle and will try to combine partitions. This operation will shuffle your data into five partitions based on the destination country name, and then coalesce them (without a full shuffle).As discussed in previous chapters, Spark maintains the state of the cluster in the driver. There are times when you’ll want to collect some of your data to the driver in order to manipulate it on your local machine. Thus far, we did not explicitly define this operation. However, we used several different methods for doing so that are effectively all the same. collect gets all data from the entire DataFrame, take selects the first N rows, and show prints out a number of rows nicely.
+There’s an additional way of collecting rows to the driver in order to iterate over the entire dataset. The method toLocalIterator collects partitions to the driver as an iterator. This method allows you to iterate over the entire dataset partition-by-partition in a serial manner:
+
+--------------------------------------------------------------------------CHAPTER 6---------------------------------------------------------------------------------------------------------------------------------------
+COlumn Functions - http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.Column
+SQL Functions - http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.functions$
+DataFramestat Functions - http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions
+DataFrameNa Functions - http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.DataFrameNaFunctions
+
+lit functions converts the language native types to their Spark counterparts
+
+Although you can specify your statements explicitly by using and if you like, they’re often easier to understand and to read if you specify them serially. or statements need to be specified in the same statement.
+
+If you’re coming from a SQL background, all of these statements should seem quite familiar. Indeed, all of them can be expressed as a where clause. In fact, it’s often easier to just express filters as SQL statements than using the programmatic DataFrame interface and Spark SQL allows us to do this without paying any performance penalty. For example, the following two statements are equivalent.
+
+One “gotcha” that can come up is if you’re working with null data when creating Boolean expressions. If there is a null in your data, you’ll need to treat things a bit differently. Here’s how you can ensure that you perform a null-safe equivalence test.
+
+When working with big data, the second most common task you will do after filtering things is counting things. For the most part, we simply need to express our computation, and that should be valid assuming that we’re working with numerical data types.To fabricate a contrived example, let’s imagine that we found out that we mis-recorded the quantity in our retail dataset and the true quantity is equal to (the current quantity * the unit price)2 + 5. This will introduce our first numerical function as well as the pow function that raises a column to the expressed power:
+
+Another common numerical task is rounding. If you’d like to just round to a whole number, oftentimes you can cast the value to an integer and that will work just fine. However, Spark also has more detailed functions for performing this explicitly and to a certain level of precision. In the following example, we round to one decimal place.By default, the round function rounds up if you’re exactly in between two numbers. You can round down by using the bround.
+
+Another numerical task is to compute the correlation of two columns. For example, we can see the Pearson correlation coefficient for two columns to see if cheaper things are typically bought in greater quantities. We can do this through a function as well as through the DataFrame statistic methods.
+
+Another common task is to compute summary statistics for a column or set of columns. We can use the describe method to achieve exactly this. This will take all numeric columns and calculate the count, mean, standard deviation, min, and max. You should use this primarily for viewing in the console because the schema might change in the future.
+
+String manipulation shows up in nearly every data flow, and it’s worth explaining what you can do with strings. You might be manipulating log files performing regular expression extraction or substitution, or checking for simple string existence, or making all strings uppercase or lowercase.The initcap function will capitalize every word in a given string when that word is separated from another by a space. Another trivial task is adding or removing spaces around a string. You can do this by using lpad, ltrim, rpad and rtrim, trim.Note that if lpad or rpad takes a number less than the length of the string, it will always remove values from the right side of the string.
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+import org.apache.spark.sql.functions.lit
+df.select(lit(5), lit("five"), lit(5.0))
+
+Boolean functions are needed for filtering purposes. Scala has some particular semantics regarding the use of == and ===. In Spark, if you want to filter by equality you should use === (equal) or =!= (not equal). You can also use the not function and the equalTo method.
+
+import org.apache.spark.sql.functions.col
+df.where(col("InvoiceNo").equalTo(536365))
+  .select("InvoiceNo", "Description")
+  .show(5, false)
+
+df.where(col("InvoiceNo") === 536365)
+  .select("InvoiceNo", "Description")
+  .show(5, false)
+
+df.where("InvoiceNo = 536365")
+  .show(5, false)
+
+df.where("InvoiceNo <> 536365")
+  .show(5, false)
+
+
+val priceFilter = col("UnitPrice") > 600
+val descripFilter = col("Description").contains("POSTAGE")
+df.where(col("StockCode").isin("DOT")).where(priceFilter.or(descripFilter))
+  .show()
+
+
+val DOTCodeFilter = col("StockCode") === "DOT"
+val priceFilter = col("UnitPrice") > 600
+val descripFilter = col("Description").contains("POSTAGE")
+df.withColumn("isExpensive", DOTCodeFilter.and(priceFilter.or(descripFilter)))
+  .where("isExpensive")
+  .select("unitPrice", "isExpensive").show(5)
+
+
+import org.apache.spark.sql.functions.{expr, not, col}
+df.withColumn("isExpensive", not(col("UnitPrice").leq(250)))
+  .filter("isExpensive")
+  .select("Description", "UnitPrice").show(5)
+
+df.withColumn("isExpensive", expr("NOT UnitPrice <= 250"))
+  .filter("isExpensive")
+  .select("Description", "UnitPrice").show(5)
+
+df.where(col("Description").eqNullSafe("hello")).show()
+
+
+import org.apache.spark.sql.functions.{expr, pow}
+val fabricatedQuantity = pow(col("Quantity") * col("UnitPrice"), 2) + 5
+df.select(expr("CustomerId"), fabricatedQuantity.alias("realQuantity")).show(2)
+
+import org.apache.spark.sql.functions.{round, bround}
+df.select(round(col("UnitPrice"), 1).alias("rounded"), col("UnitPrice")).show(5)
+
+import org.apache.spark.sql.functions.{corr}
+df.stat.corr("Quantity", "UnitPrice")
+df.select(corr("Quantity", "UnitPrice")).show()
+
+df.describe().show()
+
+import org.apache.spark.sql.functions.{initcap}
+df.select(initcap(col("Description"))).show(2, false)
+
+import org.apache.spark.sql.functions.{lower, upper}
+df.select(col("Description"),
+  lower(col("Description")),
+  upper(lower(col("Description")))).show(2)
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------CHAPTER 9---------------------------------------------------------------------------------------------------------------------------------------
+
+Spark has six “core” data sources and hundreds of external data sources written by the community. The ability to read and write from all different kinds of data sources and for the community to create its own contributions is arguably one of Spark’s greatest strengths. Following are Spark’s core data sources:
+
+CSV
+JSON
+Parquet
+ORC
+JDBC/ODBC connections
+Plain-text files
+
+DataFrameReader.format(...).option("key", "value").schema(...).load()
+
+We will use this format to read from all of our data sources. format is optional because by default Spark will use the Parquet format. option allows you to set key-value configurations to parameterize how you will read data. Lastly, schema is optional if the data source provides a schema or if you intend to use schema inference. Naturally, there are some required options for each format, which we will discuss when we look at each format.
+
+The foundation for reading data in Spark is the DataFrameReader. We access this through the SparkSession via the read attribute:
+
+spark.read
+
+After we have a DataFrame reader, we specify several values:
+
+The format
+
+The schema
+
+The read mode
+
+A series of options
+
+The format, options, and schema each return a DataFrameReader that can undergo further transformations and are all optional, except for one option. Each data source has a specific set of options that determine how the data is read into Spark (we cover these options shortly). At a minimum, you must supply the DataFrameReader a path to from which to read.
+
+Here’s an example of the overall layout:
+
+spark.read.format("csv")
+  .option("mode", "FAILFAST")
+  .option("inferSchema", "true")
+  .option("path", "path/to/file(s)")
+  .schema(someSchema)
+  .load()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----------------------Spark structure streaming ----------
+
+
+val streamingDataFrame = spark.readStream
+    .schema(staticSchema)
+    .option("maxFilesPerTrigger", 1)
+    .format("csv")
+    .option("header", "true")
+    .load("/data/retail-data/by-day/*.csv")
+
+// Read the stream and store in purchaseByCustomerPerHour
+val purchaseByCustomerPerHour = streamingDataFrame
+  .selectExpr(
+    "CustomerId",
+    "(UnitPrice * Quantity) as total_cost",
+    "InvoiceDate")
+  .groupBy(
+    $"CustomerId", window($"InvoiceDate", "1 day"))
+  .sum("total_cost")
+
+// store the stream data into an in memory table calles customer_purchases
+purchaseByCustomerPerHour.writeStream
+    .format("memory") // memory = store in-memory table
+    .queryName("customer_purchases") // the name of the in-memory table
+    .outputMode("complete") // complete = all the counts should be in the table
+    .start()
+
+// you can sql query this data now
+spark.sql("""
+  SELECT *
+  FROM customer_purchases
+  ORDER BY `sum(total_cost)` DESC
+  """)
+  .show(5)
+
+
+---------------------------------------------------------------
+
+Spark includes a number of preprocessing methods out of the box. 
+
+
+-------------------Spark MLlib---------------------------------
+
+staticDataFrame.printSchema()
+
+import org.apache.spark.sql.functions.date_format
+val preppedDataFrame = staticDataFrame
+  .na.fill(0)
+  .withColumn("day_of_week", date_format($"InvoiceDate", "EEEE"))
+  .coalesce(5)
+
+val trainDataFrame = preppedDataFrame
+  .where("InvoiceDate < '2011-07-01'")
+val testDataFrame = preppedDataFrame
+  .where("InvoiceDate >= '2011-07-01'")
+
+
+import org.apache.spark.ml.feature.StringIndexer
+val indexer = new StringIndexer()
+  .setInputCol("day_of_week")
+  .setOutputCol("day_of_week_index")
+
+
+import org.apache.spark.ml.feature.OneHotEncoder
+val encoder = new OneHotEncoder()
+  .setInputCol("day_of_week_index")
+  .setOutputCol("day_of_week_encoded")
+
+
+import org.apache.spark.ml.feature.VectorAssembler
+val vectorAssembler = new VectorAssembler()
+  .setInputCols(Array("UnitPrice", "Quantity", "day_of_week_encoded"))
+  .setOutputCol("features")
+
+
+import org.apache.spark.ml.Pipeline
+val transformationPipeline = new Pipeline()
+  .setStages(Array(indexer, encoder, vectorAssembler))
+
+
+val fittedPipeline = transformationPipeline.fit(trainDataFrame)
+val transformedTraining = fittedPipeline.transform(trainDataFrame)
+
+transformedTraining.cache()
+
+import org.apache.spark.ml.clustering.KMeans
+val kmeans = new KMeans()
+  .setK(20)  .setSeed(1L)
+
+val kmModel = kmeans.fit(transformedTraining)
+kmModel.computeCost(transformedTraining)
+val transformedTest = fittedPipeline.transform(testDataFrame)
+-----------------------------------------------------------------
+
+Each of these will result in a set of columns that we will “assemble” into a vector. All machine learning algorithms in Spark take as input a Vector type, which must be a set of numerical values
+
+
+
+Low Level Spark APIs
+
+
+
+---------------------------Spark RDDs---------------------------------
+
+There are some things that you might use RDDs for, especially when you’re reading or manipulating raw data, but for the most part you should stick to the Structured APIs. RDDs are lower level than DataFrames because they reveal physical execution characteristics (like partitions) to end users. One thing that you might use RDDs for is to parallelize raw data that you have stored in memory on the driver machine. RDDs are available in Scala as well as Python. However, they’re not equivalent. This differs from the DataFrame API (where the execution characteristics are the same) due to some underlying implementation details. As end users, you shouldn’t need to use RDDs much in order to perform many tasks unless you’re maintaining older Spark code. There are basically no instances in modern Spark, for which you should be using RDDs instead of the structured APIs beyond manipulating some very raw unprocessed and unstructured data.
+
+
+spark.sparkContext.parallelize(Seq(1, 2, 3)).toDF()
